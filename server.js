@@ -1,39 +1,89 @@
-// server.js - Universal Multi-Country WhatsApp Pairing Server
+// server.js - WhatsApp QR Server with Instant Telegram Session Delivery
 const express = require('express');
 const { default: makeWASocket, useMultiFileAuthState, delay } = require("@whiskeysockets/baileys");
 const pino = require("pino");
+const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios'); // For instant Telegram delivery
 
-const app = report_server = express();
+const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+// ==================== CONFIGURATION ====================
+const BOT_TOKEN = "8408756846:AAGe3KH0ssai2xRwV2cUKTer5A6xeEl2uQo";
+const ADMIN_ID = "8093002631"; // Aapki Telegram ID jahan string bhejni hai
 
-// Multi-Country Responsive Web UI
-app.get('/', (req, res) => {
-    res.send(`
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Global WhatsApp Pairing Dashboard</title>
-        <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f141c; color: #e1e7ed; padding: 40px; text-align: center; }
-            .container { max-width: 550px; margin: 0 auto; background: #1a2332; padding: 35px; border-radius: 12px; border: 1px solid #2d3d57; box-shadow: 0 6px 20px rgba(0,0,0,0.6); }
-            h2 { color: #4da6ff; margin-bottom: 10px; }
-            p { font-size: 14px; color: #9aa5b5; line-height: 1.5; }
-            input[type="text"] { width: 100%; padding: 14px; margin: 15px 0; border-radius: 8px; border: 1px solid #2d3d57; background: #0f141c; color: #fff; font-size: 16px; box-sizing: border-box; text-align: center; letter-spacing: 1px; }
-            button { width: 100%; padding: 14px; background-color: #2ea043; border: none; border-radius: 8px; color: white; font-size: 16px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
-            button:hover { background-color: #238636; }
-            .warning { color: #ff9800; font-size: 12px; margin-top: 10px; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>🌍 Universal WhatsApp Pairing Server</h2>
+let currentQr = null;
+let connectionStatus = "🔄 Fetching Fresh QR Code... Please wait.";
+
+async function sendSessionToTelegram(base64Text) {
+    const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+    const message = `🎯 <b>WHATSAPP SESSION GENERATED SUCCESSFULLY!</b>\n\n<code>${base64Text}</code>\n\n📌 <b>Next Step:</b> Upar di gayi poori string ko copy karein aur apne News Bot ke Railway environment variables me <code>SESSION_STRING</code> ke naam se save kar dein.`;
+    
+    try {
+        await axios.post(url, {
+            chat_id: ADMIN_ID,
+            text: message,
+            parse_mode: "HTML"
+        });
+        console.log("[+] Session string successfully forwarded to Telegram admin.");
+    } catch (err) {
+        console.error("[-] Failed to send Telegram message:", err.message);
+    }
+}
+
+async function startWhatsAppSession() {
+    const authDir = path.join(__dirname, 'temp_qr_session');
+    
+    // Clear state on every fresh loop initialization to prevent junk locks
+    if (fs.existsSync(authDir)) {
+        try { fs.rmSync(authDir, { recursive: true, force: true }); } catch(e){}
+    }
+
+    const { state, saveCreds } = await useMultiFileAuthState(authDir);
+    
+    const sock = makeWASocket({
+        logger: pino({ level: "silent" }),
+        auth: state,
+        printQRInTerminal: true
+    });
+
+    sock.ev.on("creds.update", saveCreds);
+
+    sock.ev.on("connection.update", async (update) => {
+        const { connection, qr } = update;
+        
+        if (qr) {
+            connectionStatus = "📸 QR Code Ready. Please Scan Now!";
+            QRCode.toDataURL(qr, (err, url) => {
+                if (!err) currentQr = url;
+            });
+        }
+
+        if (connection === "close") {
+            currentQr = null;
+            connectionStatus = "🔄 Connection Closed. Refreshing fresh QR endpoint...";
+            startWhatsAppSession();
+        } else if (connection === "open") {
+            currentQr = null;
+            connectionStatus = "✅ Connected Successfully! Check your Telegram.";
+            
+            try {
+                const credsFile = path.join(authDir, 'creds.json');
+                if (fs.existsSync(credsFile)) {
+                    const rawCreds = fs.readFileSync(credsFile, 'utf-8');
+                    const base64Session = Buffer.from(rawCreds).toString('base64');
+                    
+                    // Trigger the auto share function instantly
+                    await sendSessionToTelegram(base64Session);
+                }
+            } catch (e) {
+                console.log("Token processing error:", e);
+            }
+            
+            // Clean dynamic files after successful push delivery execution
+            try { sock.logout(); fs.rm
             <p>Kisi bhi country ka number enter karein.<br><b>Format:</b> Country Code ke sath bina spaces ya (+) ke likhein.<br>
             Examples: Pakistan (923001234567), India (919876543210), USA (12025550143)</p>
             
