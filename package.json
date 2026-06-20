@@ -1,0 +1,14 @@
+{
+  "name": "whatsapp-global-pairing-server",
+  "version": "1.1.0",
+  "description": "Universal WhatsApp Pairing Code Generator for Any Country Number",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.6.0",
+    "express": "^4.19.2",
+    "pino": "^9.1.0"
+  }
+}
