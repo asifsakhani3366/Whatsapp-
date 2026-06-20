@@ -1,7 +1,7 @@
 {
-  "name": "whatsapp-global-pairing-server",
-  "version": "1.1.0",
-  "description": "Universal WhatsApp Pairing Code Generator for Any Country Number",
+  "name": "whatsapp-qr-autoshare-server",
+  "version": "1.2.0",
+  "description": "WhatsApp QR Server with Auto-Telegram Session Forwarder",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -9,6 +9,8 @@
   "dependencies": {
     "@whiskeysockets/baileys": "^6.6.0",
     "express": "^4.19.2",
-    "pino": "^9.1.0"
+    "pino": "^9.1.0",
+    "qrcode": "^1.5.3",
+    "axios": "^1.6.8"
   }
 }
