@@ -1,16 +1,13 @@
 {
-  "name": "whatsapp-qr-autoshare-server",
-  "version": "1.2.0",
-  "description": "WhatsApp QR Server with Auto-Telegram Session Forwarder",
+  "name": "whatsapp-qr-direct-share",
+  "version": "1.0.0",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.6.0",
-    "express": "^4.19.2",
     "pino": "^9.1.0",
-    "qrcode": "^1.5.3",
     "axios": "^1.6.8"
   }
 }
